@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+## =================== DESCRIPTION =================== ##
+Description: >-
+  AWS Cloud watch +  eks+ jenkins + codedeploy + AMAZON PROMETHEUS
+
+## ===================== METADATA ===================== ##
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: DNS parameters for S3 buckets
+        Parameters:
+          - paramRootDomain
+          - paramSubdomain
+      - Label:
+          default: Network configuration for EKS
+        Parameters:
+          - paramEKSSecurityGroup
+          - paramEKSSubnets
+
+## ==================== PARAMETERS ==================== ##
+Parameters:
+  paramUniqueTagName:
+    Type: String
+    Default: 'yuanchao-handson-tag'
+    Description: unique tag for all resources defined in this stack Cloudformation
+  paramUniqueTagValue:
+    Type: String
+    Description: unique tag's value
+  paramEKSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: SecurityGroup id for eks cluster
+  paramEKSSubnets:
+    Type: CommaDelimitedList
+    Description: Public Subnets id for eks cluster
+
+## ==================== MAPPINGS ==================== ##
+#Mappings:
+
+
+## ==================== CONDITIONS ==================== ##
+# Conditions:
+
+## =================== RESOURCES =================== ##
+Resources:
+
+  myEKSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub eks-${paramUniqueTagValue}-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  myEKS:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Sub eks-${paramUniqueTagValue}
+      RoleArn: !GetAtt myEKSRole.Arn
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref paramEKSSecurityGroup
+        SubnetIds: !Ref paramEKSSubnets
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+  myEKSNGRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub eks-ng-${paramUniqueTagValue}-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref myEKS
+      NodegroupName: !Sub eks-nodegroup-${paramUniqueTagValue}
+      CapacityType: SPOT
+      NodeRole: !GetAtt myEKSNGRole.Arn
+      Subnets: !Ref paramEKSSubnets
+      ScalingConfig:
+        DesiredSize: 2
+        MinSize: 1
+        MaxSize: 3
+
+
+
+
+## ======================= OUTPUT ====================== ##
+#Outputs:
+
+

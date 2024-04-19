@@ -1,0 +1,20 @@
+controller:
+  adminSecret: true
+  adminUser: admin
+  adminPassword: 'formetoknowforyoutofindout'
+  JCasC:
+    securityRealm: |-
+      local:
+        allowsSignup: false
+        enableCaptcha: false
+        users:
+        - id: "admin"
+          name: "Jenkins Admin"
+          password: "qwer1234asdf_-@"
+    authorizationStrategy: |-
+      loggedInUsersCanDoAnything:
+        allowAnonymousRead: true
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: Welcome to Yuanchao aws hands-on porject topic 9 - Jenkins CI\CD server
