@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+## =================== DESCRIPTION =================== ##
+Description: >-
+  eks+ ecr + jenkins + aws alb + efs csi + AMAZON PROMETHEUS
+
+## ===================== METADATA ===================== ##
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Tag parameters for all tagable resources
+        Parameters:
+          - paramUniqueTagName
+          - paramUniqueTagValue
+      - Label:
+          default: Network configuration for Batch env
+        Parameters:
+          - paramEKSSecurityGroup
+          - paramEKSSubnets
+
+## ==================== PARAMETERS ==================== ##
+Parameters:
+  paramUniqueTagName:
+    Type: String
+    Default: 'yuanchao-handson-tag'
+    Description: unique tag for all resources defined in this stack Cloudformation
+  paramUniqueTagValue:
+    Type: String
+    Description: unique tag's value
+  paramEKSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: SecurityGroup id for eks cluster
+  paramEKSSubnets:
+    Type: CommaDelimitedList
+    Description: Public Subnets id for eks cluster
+
+## ==================== MAPPINGS ==================== ##
+#Mappings:
+
+
+## ==================== CONDITIONS ==================== ##
+# Conditions:
+
+## =================== RESOURCES =================== ##
+Resources:
+
+  myEKSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub eks-${paramUniqueTagValue}-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  myEKS:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Sub eks-${paramUniqueTagValue}
+      RoleArn: !GetAtt myEKSRole.Arn
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref paramEKSSecurityGroup
+        SubnetIds: !Ref paramEKSSubnets
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+  myEKSNGRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub eks-ng-${paramUniqueTagValue}-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref myEKS
+      NodegroupName: !Sub eks-nodegroup-${paramUniqueTagValue}
+      CapacityType: SPOT
+      NodeRole: !GetAtt myEKSNGRole.Arn
+      Subnets: !Ref paramEKSSubnets
+      ScalingConfig:
+        DesiredSize: 2
+        MinSize: 1
+        MaxSize: 3
+
+  myEFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemTags:
+      - Key: name
+        Value: !Sub 'EFS-${paramUniqueTagValue}'
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+      PerformanceMode: generalPurpose
+      Encrypted: true
+
+  myEFSAP:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      FileSystemId: !Ref myEFS
+      PosixUser:
+        Uid: "1000"
+        Gid: "1000"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "777"
+        Path: "/jenkins"
+
+
+  myMountTarget1:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+    - myEFS
+    Properties:
+      FileSystemId: !Ref myEFS
+      SubnetId: !Select [ 0, !Ref paramEKSSubnets ]
+      SecurityGroups:
+      - !Ref paramEKSSecurityGroup
+
+
+  myMountTarget2:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+    - myEFS
+    Properties:
+      FileSystemId: !Ref myEFS
+      SubnetId: !Select [ 1, !Ref paramEKSSubnets ]
+      SecurityGroups:
+      - !Ref paramEKSSecurityGroup
+
+  MyRepo: 
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: !Sub 'repo-${paramUniqueTagValue}'
+      RepositoryPolicyText: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Principal: 
+              AWS: 
+               - !Ref AWS::AccountId
+            Action: 
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+              - "ecr:GetAuthorizationToken"
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+## ======================= OUTPUT ====================== ##
+Outputs:
+  EKSOpenIdUrl:
+    Description: OpenId url for eks
+    Value: !GetAtt myEKS.OpenIdConnectIssuerUrl
+  EKSCAData:
+    Description: EKS CA data
+    Value: !GetAtt myEKS.CertificateAuthorityData
+  ECRUrl:
+    Description: ECR repo URL
+    Value: !GetAtt MyRepo.RepositoryUri
+
+
+

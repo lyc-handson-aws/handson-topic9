@@ -1,0 +1,141 @@
+jenkins:
+  additionalAgents:
+    maven:
+      podName: maven
+      customJenkinsLabels: maven
+      sideContainerName: maven
+      image: 
+        repository: maven
+        tag: 3-eclipse-temurin-17
+      command: "sleep"
+      args: "9999"
+      ttyEnabled: true
+  agent:
+    podName: default
+    customJenkinsLabels: default
+    envVars:
+      - name: EKS_CLUSTER
+      - name: AWS_DEFAULT_REGION
+    podTemplates:
+       aws-kaniko: |
+        - name: aws-kaniko
+          label: aws-kaniko
+          inheritFrom: default
+          namespace: jenkins
+          containers:
+            - name: aws
+              image: public.ecr.aws/aws-cli/aws-cli
+              command: "sleep"
+              args: "9999"
+              ttyEnabled: true
+              privileged: true
+            - name: kaniko
+              image: gcr.io/kaniko-project/executor:debug
+              command: "sleep"
+              args: "9999"
+              ttyEnabled: true
+              privileged: true
+  persistence:
+    accessMode: ReadWriteMany
+    existingClaim: "efs-claim"
+  controller:
+    additionalPlugins:
+      - credentials-binding:latest
+      - ldap:latest
+      - matrix-auth:latest
+      - pam-auth:latest
+      - mailer:latest
+      - email-ext:latest
+      - github:latest
+      - github-branch-source:latest
+      - gitlab-plugin:latest
+      - git-parameter:latest
+      - ssh-slaves:latest
+      - pipeline-github-lib:latest
+      - pipeline-stage-view:latest
+      - build-timeout:latest
+      - cloudbees-folder:latest
+      - antisamy-markup-formatter:latest
+      - build-timeout:latest
+      - timestamper:latest
+      - ws-cleanup:latest
+      - aws-credentials:latest
+    #serviceType: LoadBalancer
+    ingress:
+      enabled: true
+      hostName: topic9-jenkins.lyc-handson-aws.com
+      annotations:
+        kubernetes.io/ingress.class: alb
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/group.name: handson-topic9-jenkins
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+        alb.ingress.kubernetes.io/ssl-redirect: '443'
+        alb.ingress.kubernetes.io/target-type: ip
+    podSecurityContextOverride:
+      runAsNonRoot: true
+      runAsUser: 1000
+      supplementalGroups: [1000]
+    existingSecret: secret-credentials
+    additionalExistingSecrets:
+      - name: secret-credentials
+        keyName: aws-configure-access
+      - name: secret-credentials
+        keyName: aws-configure-secret
+      - name: secret-credentials
+        keyName: aws-account-id
+      - name: secret-credentials
+        keyName: github-token  
+    additionalSecrets:
+      - name: sR_admin_pwd
+      - name: sR_javadev_pwd
+    JCasC:
+      securityRealm: |-
+        local:
+          allowsSignup: false
+          enableCaptcha: false
+          users:
+          - id: "admin"
+            name: "Jenkins-Admin"
+            password: ${sR_admin_pwd}
+          - id: "dev-java"
+            name: "Java project developer"
+            password: ${sR_javadev_pwd}
+      authorizationStrategy: |-
+        loggedInUsersCanDoAnything:
+          allowAnonymousRead: true
+      configScripts:
+        welcome-message: |
+          jenkins:
+            systemMessage: Welcome to Yuanchao AWS  hands-on porject topic 9 - Jenkins CI\CD server
+        jenkins-casc-configs: |
+          credentials:
+            system:
+              domainCredentials:
+              - credentials:
+                - aws:
+                    description: "aws configure Access Secret"
+                    id: "aws_configure_access_secret"
+                    accessKey: ${secret-credentials-aws-configure-access}
+                    scope: GLOBAL
+                    secretKey: ${secret-credentials-aws-configure-secret}
+                - string:
+                    description: "aws account id"
+                    id: "aws_account_id"
+                    scope: GLOBAL
+                    secret: ${secret-credentials-aws-account-id}
+                - usernamePassword:
+                    description: "github token"
+                    id: "github_token"
+                    scope: GLOBAL
+                    password: ${secret-credentials-github-token}
+                    username: user
+
+jenkins_credentials:
+  - name: aws-configure-access
+    value: xx
+  - name: aws-configure-secret
+    value: xx
+  - name: aws-account-id
+    value: xx
+  - name: github-token
+    value: xx

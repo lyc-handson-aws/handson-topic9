@@ -1,0 +1,48 @@
+name: App helm deployment
+
+on: 
+  workflow_dispatch:
+    inputs:
+      app_env:    
+        description: 'app deployment env'     
+        required: true
+      image_version:
+        description: 'app image tag'
+        required: true
+  
+env:
+  AWS_REGION: eu-west-3
+  IMAGE_REPO: repo-handson-topic9
+
+jobs:
+  deploy_app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get kubeconfig
+        run: |
+          aws eks update-kubeconfig --name eks-${{ github.event.repository.name }} --region ${{ env.AWS_REGION }}  --kubeconfig ./kubeconfig
+          echo 'KUBE_CONFIG_DATA<<EOF' >> $GITHUB_ENV
+          echo $(cat ./kubeconfig | base64) >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Deploy app via helm
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: |
+            helm upgrade --install java-springboot \
+            --create-namespace --namespace deployment-${{ github.event.inputs.app_env }} \
+            -f java-app/helm-charts/values.yaml \
+            java-app/helm-charts \
+            --set app.env=${{ github.event.inputs.app_env }} \
+            --set app.image=${{ secrets.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.IMAGE_REPO }}:${{ github.event.inputs.image_version }} \
+            --set aws.certificate_arn=${{ secrets.CERT_ARN }}     

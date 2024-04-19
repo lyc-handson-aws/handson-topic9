@@ -1,0 +1,136 @@
+name: Initial EKS Cluster with jenkins,efs-csi controller,aws-lb controller
+
+on: 
+  workflow_dispatch:
+  push:
+    paths:
+      - 'helm-charts/**'
+      - 'kube/**'
+      - '.github/workflows/action-eks.yaml'
+env:
+  AWS_REGION: eu-west-3
+
+jobs:
+  Install_efs-csi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get kubeconfig
+        run: |
+          aws eks update-kubeconfig --name eks-${{ github.event.repository.name }} --region ${{ env.AWS_REGION }}  --kubeconfig ./kubeconfig
+          echo 'KUBE_CONFIG_DATA<<EOF' >> $GITHUB_ENV
+          echo $(cat ./kubeconfig | base64) >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Kube apply efs csi controller serviceaccount
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: kubectl apply -f kube/efs-csi-controller-sa.yaml
+
+      - name: Deploy efs csi controller
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: |
+            helm repo add aws-efs-csi-driver https://kubernetes-sigs.github.io/aws-efs-csi-driver/
+            helm repo update aws-efs-csi-driver
+            helm upgrade --install aws-efs-csi-driver \
+            --namespace kube-system aws-efs-csi-driver/aws-efs-csi-driver \
+            --set controller.serviceAccount.create=false \
+            --set controller.serviceAccount.name=efs-csi-controller-sa
+
+  Install_aws-lb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get kubeconfig
+        run: |
+          aws eks update-kubeconfig --name eks-${{ github.event.repository.name }} --region ${{ env.AWS_REGION }}  --kubeconfig ./kubeconfig
+          echo 'KUBE_CONFIG_DATA<<EOF' >> $GITHUB_ENV
+          echo $(cat ./kubeconfig | base64) >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Kube apply aws loadbalancer controller serviceaccount
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: kubectl apply -f kube/aws-load-balancer-controller-sa.yaml
+
+      - name: Deploy aws loadbalancer controller 
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: |
+            helm repo add eks https://aws.github.io/eks-charts
+            helm repo update eks
+            helm upgrade --install aws-load-balancer-controller \
+            -n kube-system eks/aws-load-balancer-controller \
+            --set clusterName=eks-${{ github.event.repository.name }} \
+            --set serviceAccount.create=false \
+            --set serviceAccount.name=aws-load-balancer-controller-sa \
+            --set region=${{ env.AWS_REGION }} \
+            --set vpcId=${{ secrets.VPC }}
+
+  Install_jenkins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get kubeconfig
+        run: |
+          aws eks update-kubeconfig --name eks-${{ github.event.repository.name }} --region ${{ env.AWS_REGION }}  --kubeconfig ./kubeconfig
+          echo 'KUBE_CONFIG_DATA<<EOF' >> $GITHUB_ENV
+          echo $(cat ./kubeconfig | base64) >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Update helm dependance package
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: helm dep update helm-charts
+
+      - name: Deploy jenkins
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: |
+            helm upgrade --install handson-topic9 \
+            --create-namespace --namespace jenkins \
+            -f helm-charts/values.yaml helm-charts \
+            --set jenkins.ingress.annotations.alb.ingress.kubernetes.io/certificate-arn=${{ secrets.CERT_ARN }} \
+            --set aws.efsid=${{ secrets.EFS_ID }} \
+            --set jenkins.agent.envVars[0].value=eks-${{ github.event.repository.name }} \
+            --set jenkins.agent.envVars[1].value=${{ env.AWS_REGION }} \
+            --set jenkins_credentials[0].value=${{ secrets.AWS_ACCESS_KEY_ID }} \
+            --set jenkins_credentials[1].value=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            --set jenkins_credentials[2].value=${{ secrets.ACCOUNT_ID }} \
+            --set jenkins_credentials[3].value=${{ secrets.TOKEN_GITHUB }} \
+            --set jenkins.controller.additionalSecrets[0].value=${{ secrets.JENKINS_ADMIN_PWD }} \
+            --set jenkins.controller.additionalSecrets[1].value=${{ secrets.JENKINS_DEV_PWD }}          

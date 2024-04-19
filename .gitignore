@@ -1,0 +1,6 @@
+kube-example
+todo
+*.sh
+*.tgz
+*.txt
+target

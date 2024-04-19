@@ -1,0 +1,27 @@
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: deployment-{{ .Values.app.env }}
+  name: ingress-aws-{{ .Values.app.name }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/group.name: handson-topic9-{{ .Values.app.name }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.aws.certificate_arn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb
+  rules:
+    - host: topic9-{{ .Values.app.env }}.lyc-handson-aws.com
+      http: 
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: service-{{ .Values.app.name }}
+              port: 
+                number: 80

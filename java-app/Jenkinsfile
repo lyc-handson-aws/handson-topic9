@@ -1,0 +1,126 @@
+pipeline {
+  environment {
+    // AWS_DEFAULT_REGION = 'eu-west-3'
+    // EKS_CLUSTER = 'eks-handson-topic9'
+    AWS_ACCOUNT = credentials('aws_account_id')
+    IMAGE_REPO = 'repo-handson-topic9'
+  }
+  agent none
+  stages {
+    stage('JAVA Build & Test') {
+      agent {
+          kubernetes {
+              inheritFrom 'maven'
+          }
+      }
+      //when { 
+      //  changeset "java-app/**"
+      //}
+      steps {
+        dir('java-app'){
+          container('maven') {
+            sh 'mvn -B clean package'
+            stash includes: 'target/*.jar', name: 'app-jar'
+            script {
+                env.APP_VERSION = sh (script: 'mvn -q -Dexec.executable=echo -Dexec.args=\'${project.version}\' --non-recursive exec:exec', returnStdout: true).trim()
+            }
+          }
+        }
+      }
+      post {
+          always {
+              dir('java-app'){
+                junit 'target/surefire-reports/*.xml'
+              }
+          }
+      }
+    }
+
+    stage('Image Build & Push') {
+      agent {
+          kubernetes {
+              inheritFrom 'aws-kaniko'
+          }
+      }
+      //when { 
+      //  changeset "java-app/**"
+      //}
+      steps {
+        script {
+          if (env.BRANCH_NAME == 'main') {
+            env.IMAGE_VERSION = "latest"
+          } else {
+            env.IMAGE_VERSION = env.APP_VERSION
+          }
+        }
+        dir('java-app/assets') {
+          unstash 'app-jar'
+          sh 'mv target/*.jar ./'
+        }
+        dir('java-app') {
+          withCredentials([aws(
+            credentialsId: "aws_configure_access_secret",
+            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+            )]) {
+            container('aws'){
+              sh '''
+              aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID; 
+              aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY; 
+              aws configure set default.region ${AWS_DEFAULT_REGION};
+              '''
+              script {
+                env.ECR_PWD = sh (script: 'aws ecr get-login-password --region ${AWS_DEFAULT_REGION}', returnStdout: true).trim()
+              }
+            }
+          }  
+          container('kaniko'){
+            sh 'echo -n "{\\"auths\\":{\\"${AWS_ACCOUNT}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\\":{\\"username\\":\\"AWS\\",\\"password\\":\\"${ECR_PWD}\\"}}}" > /kaniko/.docker/config.json'
+            sh '''
+            ls -al assets;
+            /kaniko/executor --context ./assets \
+            --dockerfile "./Dockerfile" \
+            --destination "${AWS_ACCOUNT}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO}:${IMAGE_VERSION}"
+            '''            
+          }
+        }          
+      }
+    }
+
+    stage('Github Action Launch') {
+      //when { 
+      //  changeset "java-app/**"
+      //}
+      agent {
+          kubernetes {
+              inheritFrom 'maven'
+          }
+      }
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'github_token', 
+            passwordVariable: 'GITHUB_TOKEN',
+            usernameVariable: 'GITHUB_USER'
+          )]) {
+          script {
+              if (env.BRANCH_NAME == 'main') {
+                  env.APP_ENV = "prod"
+              } else {
+                  env.APP_ENV = "dev"
+              }
+          }
+          sh """
+          curl -X POST "https://api.github.com/repos/lyc-handson-aws/handson-topic9/actions/workflows/action-app.yaml/dispatches" \\
+          -H "Accept: application/vnd.github+json" \\
+          -H "authorization: Bearer $GITHUB_TOKEN" \\
+          -H "X-GitHub-Api-Version: 2022-11-28" \\
+          -d "{ \\
+            \\"ref\\":\\"$BRANCH_NAME\\", \\"inputs\\": { \\
+              \\"app_env\\": \\"$APP_ENV\\", \\"image_version\\": \\"$IMAGE_VERSION\\"}}" 
+          """
+
+        }
+      }
+    }
+  }
+}

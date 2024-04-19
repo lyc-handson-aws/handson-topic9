@@ -1,0 +1,7 @@
+app:
+  name: java-springboot-helloworld-test
+  env: dev
+  image: xx:xx
+
+aws:
+  certificate_arn: arn:aws:acm:eu-west-3:654654303557:certificate/895782e5-ad48-41c2-8ea7-1a70de3952e1
