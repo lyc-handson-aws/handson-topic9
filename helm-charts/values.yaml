@@ -60,6 +60,7 @@ jenkins:
       - timestamper:latest
       - ws-cleanup:latest
       - aws-credentials:latest
+      - github-pullrequest:latest
     #serviceType: LoadBalancer
     ingress:
       enabled: true
@@ -100,9 +101,50 @@ jenkins:
           - id: "dev-java"
             name: "Java project developer"
             password: ${sR_javadev_pwd}
+          - id: "login-user"
+            name: "an anonyme login user"
+            password: 1235QWER54321qwer
       authorizationStrategy: |-
-        loggedInUsersCanDoAnything:
-          allowAnonymousRead: true
+        globalMatrix:
+          entries:
+            - group:
+                name: authenticated
+                permissions:
+                  - "Overall/Read"
+                  - "Credentials/View"
+                  - "Job/Read"
+                  - "View/Read"
+                  - "Metrics/View"
+            - user:
+                name: anonymous
+                permissions:
+                  - Overall/Read
+            - user:
+                name: admin
+                permissions:
+                  - Overall/Administer
+            - user:
+                name: dev-java
+                permissions:
+                  - "Overall/Read"
+                  - "Credentials/View"
+                  - "Credentials/Update"
+                  - "Credentials/Create"
+                  - "Job/Build"
+                  - "Job/Cancel"
+                  - "Job/Configure"
+                  - "Job/Create"
+                  - "Job/Delete"
+                  - "Job/Move"
+                  - "Job/Read"
+                  - "Job/Workspace"
+                  - "Run/Update"
+                  - "View/Read"
+                  - "View/Delete"
+                  - "View/Create"
+                  - "View/Configure"
+                  - "Metrics/HealthCheck"
+                  - "Metrics/View"
       configScripts:
         welcome-message: |
           jenkins:
