@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: deployment-dev
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: deployment-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+

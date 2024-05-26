@@ -1,0 +1,22 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: requirednamespace
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequiredNamespace
+        listKind: RequiredNamespaceList
+        plural: requirednamespace
+        singular: requirednamespace
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requirednamespace
+
+        violation[{"msg": msg}] {
+          namespace := input.review.object.metadata.namespace 
+          namespace == "default"
+          msg := "you must provide a namespace other than default"
+        }

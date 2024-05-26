@@ -1,12 +1,12 @@
-name: Initial EKS Cluster with jenkins,efs-csi controller,aws-lb controller
+name: Initial EKS Cluster with CKS OPA, jenkins,efs-csi controller,aws-lb controller
 
 on: 
   workflow_dispatch:
-  push:
-    paths:
-      - 'helm-charts/**'
-      - 'kube/**'
-      - '.github/workflows/action-eks.yaml'
+  #push:
+  #  paths:
+  #    - 'helm-charts/**'
+  #    - 'kube/**'
+  #    - '.github/workflows/action-eks.yaml'
 env:
   AWS_REGION: eu-west-3
 
@@ -28,6 +28,13 @@ jobs:
           echo 'KUBE_CONFIG_DATA<<EOF' >> $GITHUB_ENV
           echo $(cat ./kubeconfig | base64) >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
+
+      - name: Kube apply CKS OPA Policy for deployment ns
+        uses: koslib/helm-eks-action@master
+        env:
+          KUBE_CONFIG_DATA: ${{ env.KUBE_CONFIG_DATA }}
+        with:
+          command: kubectl apply -f kube/Gatekeeper-OPA/
 
       - name: Kube apply efs csi controller serviceaccount
         uses: koslib/helm-eks-action@master
@@ -124,6 +131,7 @@ jobs:
             helm upgrade --install handson-topic9 \
             --create-namespace --namespace jenkins \
             -f helm-charts/values.yaml helm-charts \
+            --set handson-topic=${{ github.event.repository.name }} \
             --set jenkins.ingress.annotations.alb.ingress.kubernetes.io/certificate-arn=${{ secrets.CERT_ARN }} \
             --set aws.efsid=${{ secrets.EFS_ID }} \
             --set jenkins.agent.envVars[0].value=eks-${{ github.event.repository.name }} \

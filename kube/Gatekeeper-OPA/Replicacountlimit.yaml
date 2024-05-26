@@ -1,0 +1,12 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: Replicacountlimit
+metadata:
+  name: deployment-must-have-limited-replicas
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+  parameters:
+    min: 2
+    max: 4

@@ -1,0 +1,9 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequiredNamespace
+metadata:
+  name: namespace-policy
+spec:
+  match:
+    kinds:
+      - apiGroups: ["extensions", "apps", ""]
+        kinds: ["Deployment", "Pod", "StatefulSet", "Secret", "ConfigMap", "Service"]

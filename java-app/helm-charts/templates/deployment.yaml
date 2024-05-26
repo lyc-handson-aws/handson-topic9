@@ -4,8 +4,7 @@ metadata:
   name: deploy-{{ .Values.app.name }}
   namespace: deployment-{{ .Values.app.env }}
   labels:
-    app: {{ .Values.app.name }}
-    env: {{ .Values.app.env }}
+{{ include "handson.labels" . | indent 4 }}
 spec:
   replicas: 2
   selector:
@@ -15,14 +14,22 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Values.app.name }}
-        env: {{ .Values.app.env }}
+{{ include "handson.labels" . | indent 8 }}
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      automountServiceAccountToken: false
+      runtimeClassName: gvisor
       restartPolicy: Always
       containers:
       - name: container-{{ .Values.app.name }}
         image: {{ .Values.app.image }}
         imagePullPolicy: Always
+        securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readonlyRootFilesystem: true
         ports:
         - containerPort: 8080
         resources:

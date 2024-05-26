@@ -2,10 +2,10 @@ name: Upload CF template and Push to CF stack
 
 on: 
   workflow_dispatch:
-  push:
-    paths:
-      - 'cf/**'
-      - '.github/workflows/action-cf.yaml'
+  #push:
+  #  paths:
+  #    - 'cf/**'
+  #    - '.github/workflows/action-cf.yaml'
 
 env:
   STACKS_BUCKET: s3bucket-handson-topic1

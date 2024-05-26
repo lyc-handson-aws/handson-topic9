@@ -2,7 +2,17 @@ AWSTemplateFormatVersion: 2010-09-09
 
 ## =================== DESCRIPTION =================== ##
 Description: >-
-  eks+ ecr + jenkins + aws alb + efs csi + AMAZON PROMETHEUS
+  A Cloudformation Stack for building a basic Kubernetes Cluster
+  A EFS instance who will be used by Jenkins on the Cluster
+  A ECR Repo who will be used to sotre the application's image
+    - Amazon EKS
+    - AWS ELB(ALB)
+    - AWS EFS
+    - AWS ECR
+  After stack is launched and finished, User need to :
+   1. install alb and efs csi controller on the cluster
+   2. install jenkins instance on the cluster
+   3. write application code/Dockerfile/Jenkinsfile/Helm
 
 ## ===================== METADATA ===================== ##
 Metadata:
@@ -174,13 +184,6 @@ Resources:
       - Key: !Ref paramUniqueTagName
         Value: !Ref paramUniqueTagValue
 
-  myAPSWorkspace:
-    Type: AWS::APS::Workspace
-    Properties:
-      Alias: !Sub 'aps-${paramUniqueTagValue}'
-      Tags:
-      - Key: !Ref paramUniqueTagName
-        Value: !Ref paramUniqueTagValue
 
 ## ======================= OUTPUT ====================== ##
 Outputs:
@@ -193,9 +196,6 @@ Outputs:
   ECRUrl:
     Description: ECR repo URL
     Value: !GetAtt MyRepo.RepositoryUri
-  PrometheusEndpoint:
-    Description: Prometheus Endpoint
-    Value: !GetAtt myAPSWorkspace.PrometheusEndpoint
 
 
 
